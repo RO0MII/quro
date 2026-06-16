@@ -66,17 +66,22 @@ const (
 
 	DeleteNode = `DELETE FROM nodes WHERE id = $1`
 
-	FindUserByEmail = `SELECT id, username, email, password_hash, created_at FROM users WHERE email = $1`
+	FindUserByEmail = `SELECT id, username, email, password_hash, role, created_at FROM users WHERE email = $1`
 
-	FindUserByUsername = `SELECT id, username, email, password_hash, created_at FROM users WHERE username = $1`
+	FindUserByUsername = `SELECT id, username, email, password_hash, role, created_at FROM users WHERE username = $1`
 
 	FindUserByUsernameOrEmail = `
-		SELECT id, username, email, password_hash, created_at FROM users
+		SELECT id, username, email, password_hash, role, created_at FROM users
 		WHERE username = $1 OR email = $1
 	`
 
 	CreateUser = `
 		INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3)
+		RETURNING id, username, email, created_at
+	`
+
+	CreateUserWithRole = `
+		INSERT INTO users (username, email, password_hash, role) VALUES ($1, $2, $3, $4)
 		RETURNING id, username, email, created_at
 	`
 

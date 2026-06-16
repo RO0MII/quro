@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -49,7 +51,7 @@ type ServerResponse struct {
 	StartupCommand   string            `json:"startup_command,omitempty"`
 	Variables        map[string]string `json:"variables,omitempty"`
 	Notes            string            `json:"notes,omitempty"`
-	CreatedAt        string            `json:"created_at"`
+	CreatedAt        time.Time         `json:"created_at"`
 }
 
 func ListServers(db *pgxpool.Pool) gin.HandlerFunc {
@@ -139,12 +141,69 @@ func CreateServer(db *pgxpool.Pool, hub *websocket.Hub) gin.HandlerFunc {
 			s.Variables = variables
 		}
 
+		// Deploy to the node via the daemon API
+		go deployToNode(db, s, req)
+
 		hub.Broadcast(websocket.Message{
 			Type: "server:created",
 			Data: s,
 		})
 
 		c.JSON(http.StatusCreated, s)
+	}
+}
+
+func deployToNode(db *pgxpool.Pool, s ServerResponse, req CreateServerRequest) {
+	var nodeAddress string
+	var nodePort int
+	var nodeToken string
+	err := db.QueryRow(context.Background(),
+		`SELECT address, port, token FROM nodes WHERE id = $1`, req.NodeID,
+	).Scan(&nodeAddress, &nodePort, &nodeToken)
+	if err != nil {
+		log.Printf("deploy: failed to find node %s: %v", req.NodeID, err)
+		return
+	}
+
+	daemonURL := fmt.Sprintf("http://%s:%d/api/containers", nodeAddress, nodePort)
+
+	payload := map[string]interface{}{
+		"server_id":         s.ID,
+		"name":              s.Name,
+		"minecraft_version": req.MinecraftVersion,
+		"server_type":       req.ServerType,
+		"ram":               req.RAM,
+		"cpu":               req.CPU,
+		"disk":              req.Disk,
+		"port":              req.Port,
+	}
+	body, _ := json.Marshal(payload)
+
+	httpReq, err := http.NewRequest(http.MethodPost, daemonURL, strings.NewReader(string(body)))
+	if err != nil {
+		log.Printf("deploy: failed to create request: %v", err)
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Node-Token", nodeToken)
+
+	resp, err := httpClient.Do(httpReq)
+	if err != nil {
+		log.Printf("deploy: failed to reach daemon at %s: %v", daemonURL, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		log.Printf("deploy: daemon returned %d: %s", resp.StatusCode, string(respBody))
+		return
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+	if cid, ok := result["container_id"].(string); ok {
+		log.Printf("deploy: server %s deployed as container %s on node %s", s.ID, cid, req.NodeID)
 	}
 }
 
@@ -513,7 +572,7 @@ type BackupResponse struct {
 	Path      string `json:"path"`
 	Size      int64  `json:"size"`
 	Status    string `json:"status"`
-	CreatedAt string `json:"created_at"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func CreateBackup(db *pgxpool.Pool) gin.HandlerFunc {
@@ -740,7 +799,7 @@ type ScheduleResponse struct {
 	Action    string                 `json:"action"`
 	Payload   map[string]interface{} `json:"payload"`
 	Enabled   bool                   `json:"enabled"`
-	CreatedAt string                 `json:"created_at"`
+	CreatedAt time.Time              `json:"created_at"`
 }
 
 func CreateSchedule(db *pgxpool.Pool) gin.HandlerFunc {

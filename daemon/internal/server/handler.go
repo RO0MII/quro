@@ -94,13 +94,14 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 type createContainerRequest struct {
-	ServerID        string `json:"server_id"`
-	Name            string `json:"name"`
+	ServerID         string `json:"server_id"`
+	Name             string `json:"name"`
 	MinecraftVersion string `json:"minecraft_version"`
-	RAM             int    `json:"ram"`
-	CPU             int    `json:"cpu"`
-	Disk            int    `json:"disk"`
-	Port            int    `json:"port"`
+	ServerType       string `json:"server_type"`
+	RAM              int    `json:"ram"`
+	CPU              int    `json:"cpu"`
+	Disk             int    `json:"disk"`
+	Port             int    `json:"port"`
 }
 
 func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {
@@ -124,6 +125,7 @@ func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {
 			ServerID:         req.ServerID,
 			Name:             req.Name,
 			MinecraftVersion: req.MinecraftVersion,
+			ServerType:       req.ServerType,
 			RAM:              req.RAM,
 			CPU:              req.CPU,
 			Disk:             req.Disk,

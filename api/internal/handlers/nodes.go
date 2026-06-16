@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"time"
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
@@ -38,8 +39,8 @@ type NodeResponse struct {
 	TotalDisk     int64  `json:"total_disk"`
 	UsedDisk      int64  `json:"used_disk"`
 	DaemonVersion string `json:"daemon_version"`
-	LastHeartbeat string `json:"last_heartbeat,omitempty"`
-	CreatedAt     string `json:"created_at"`
+	LastHeartbeat *time.Time `json:"last_heartbeat,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 func generateToken() string {
@@ -62,15 +63,13 @@ func ListNodes(db *pgxpool.Pool) gin.HandlerFunc {
 		var nodes []NodeResponse
 		for rows.Next() {
 			var n NodeResponse
-			var lastHeartbeat *string
+			var lastHeartbeat *time.Time
 			if err := rows.Scan(&n.ID, &n.Name, &n.Address, &n.Port, &n.Token, &n.Status,
 				&n.TotalRAM, &n.UsedRAM, &n.TotalCPU, &n.UsedCPU, &n.TotalDisk,
 				&n.UsedDisk, &n.DaemonVersion, &lastHeartbeat, &n.CreatedAt); err != nil {
 				continue
 			}
-			if lastHeartbeat != nil {
-				n.LastHeartbeat = *lastHeartbeat
-			}
+			n.LastHeartbeat = lastHeartbeat
 			nodes = append(nodes, n)
 		}
 
@@ -86,7 +85,7 @@ func GetNode(db *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 		var n NodeResponse
-		var lastHeartbeat *string
+		var lastHeartbeat *time.Time
 
 		err := db.QueryRow(c.Request.Context(), database.GetNode, id).
 			Scan(&n.ID, &n.Name, &n.Address, &n.Port, &n.Token, &n.Status,
@@ -96,9 +95,7 @@ func GetNode(db *pgxpool.Pool) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "node not found"})
 			return
 		}
-		if lastHeartbeat != nil {
-			n.LastHeartbeat = *lastHeartbeat
-		}
+		n.LastHeartbeat = lastHeartbeat
 
 		c.JSON(http.StatusOK, n)
 	}
@@ -114,7 +111,7 @@ func CreateNode(db *pgxpool.Pool) gin.HandlerFunc {
 
 		token := generateToken()
 		var n NodeResponse
-		var lastHeartbeat *string
+		var lastHeartbeat *time.Time
 		err := db.QueryRow(c.Request.Context(), database.CreateNode, req.Name, req.Address, req.Port, token).
 			Scan(&n.ID, &n.Name, &n.Address, &n.Port, &n.Token, &n.Status,
 				&n.TotalRAM, &n.UsedRAM, &n.TotalCPU, &n.UsedCPU, &n.TotalDisk,
@@ -132,7 +129,7 @@ func GetNodeConfig(db *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 		var n NodeResponse
-		var lastHeartbeat *string
+		var lastHeartbeat *time.Time
 
 		err := db.QueryRow(c.Request.Context(), database.GetNode, id).
 			Scan(&n.ID, &n.Name, &n.Address, &n.Port, &n.Token, &n.Status,

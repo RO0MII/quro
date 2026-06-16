@@ -41,12 +41,15 @@ func main() {
 	{
 		auth := api.Group("/auth")
 		{
-			auth.POST("/login", handlers.AutoLogin(db, cfg.JWTSecret))
+			auth.POST("/login", handlers.Login(db, cfg.JWTSecret))
 		}
 
 		protected := api.Group("")
 		protected.Use(middleware.Auth(cfg.JWTSecret))
 		{
+			protected.GET("/auth/me", handlers.Me(db))
+			protected.GET("/users", handlers.ListUsers(db))
+			protected.POST("/users", handlers.AdminCreateUser(db, cfg.JWTSecret))
 			protected.GET("/servers", handlers.ListServers(db))
 			protected.GET("/servers/:id", handlers.GetServer(db))
 			protected.POST("/servers", handlers.CreateServer(db, hub))

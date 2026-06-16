@@ -14,6 +14,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	nat "github.com/docker/go-connections/nat"
 )
 
 type Manager struct {
@@ -21,14 +22,15 @@ type Manager struct {
 }
 
 type ContainerConfig struct {
-	ServerID        string
-	Name            string
+	ServerID         string
+	Name             string
 	MinecraftVersion string
-	RAM             int
-	CPU             int
-	Disk            int
-	Port            int
-	DataDir         string
+	ServerType       string
+	RAM              int
+	CPU              int
+	Disk             int
+	Port             int
+	DataDir          string
 }
 
 func NewManager() (*Manager, error) {
@@ -49,22 +51,45 @@ func (m *Manager) CreateContainer(ctx context.Context, cfg ContainerConfig) (str
 		return "", fmt.Errorf("failed to create data directory: %w", err)
 	}
 
-	image := fmt.Sprintf("itzg/minecraft-server:%s", cfg.MinecraftVersion)
+	serverType := "VANILLA"
+	imageTag := "latest"
+	switch cfg.ServerType {
+	case "paper":
+		serverType = "PAPER"
+	case "forge":
+		serverType = "FORGE"
+	case "fabric":
+		serverType = "FABRIC"
+	case "spigot":
+		serverType = "SPIGOT"
+	default:
+		serverType = "VANILLA"
+	}
+
+	env := []string{
+		"EULA=TRUE",
+		fmt.Sprintf("MEMORY=%dM", cfg.RAM),
+		fmt.Sprintf("TYPE=%s", serverType),
+		fmt.Sprintf("VERSION=%s", cfg.MinecraftVersion),
+		fmt.Sprintf("MAX_PLAYERS=20"),
+		fmt.Sprintf("DIFFICULTY=normal"),
+		fmt.Sprintf("ONLINE_MODE=TRUE"),
+		fmt.Sprintf("SPAWN_PROTECTION=16"),
+		fmt.Sprintf("VIEW_DISTANCE=10"),
+		fmt.Sprintf("SIMULATION_DISTANCE=10"),
+		fmt.Sprintf("SERVER_PORT=25565"),
+		fmt.Sprintf("STOP_SERVER_ON_DISABLE=TRUE"),
+	}
 
 	resp, err := m.client.ContainerCreate(ctx, &container.Config{
-		Image: image,
-		Env: []string{
-			fmt.Sprintf("EULA=TRUE"),
-			fmt.Sprintf("MEMORY=%dM", cfg.RAM),
-			fmt.Sprintf("TYPE=VANILLA"),
-			fmt.Sprintf("VERSION=%s", cfg.MinecraftVersion),
-		},
-		ExposedPorts: nat.PortSet{
-			"25565/tcp": struct{}{},
-		},
+		Image: "itzg/minecraft-server:" + imageTag,
+		Env:   env,
 		Labels: map[string]string{
-			"quro.managed": "true",
-			"quro.server_id": cfg.ServerID,
+			"quro.managed":     "true",
+			"quro.server_id":   cfg.ServerID,
+			"quro.server_type": cfg.ServerType,
+			"quro.version":     cfg.MinecraftVersion,
+			"quro.name":        cfg.Name,
 		},
 	}, &container.HostConfig{
 		Resources: container.Resources{
@@ -75,6 +100,9 @@ func (m *Manager) CreateContainer(ctx context.Context, cfg ContainerConfig) (str
 			"25565/tcp": []nat.PortBinding{
 				{HostIP: "0.0.0.0", HostPort: fmt.Sprintf("%d", cfg.Port)},
 			},
+		},
+		RestartPolicy: container.RestartPolicy{
+			Name: "unless-stopped",
 		},
 		Binds: []string{
 			fmt.Sprintf("%s:/data", dataDir),

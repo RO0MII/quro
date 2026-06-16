@@ -8,6 +8,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var globalPool *pgxpool.Pool
+
+func SetPool(pool *pgxpool.Pool) {
+	globalPool = pool
+}
+
+func GetDB() *pgxpool.Pool {
+	return globalPool
+}
+
 func Connect(databaseURL string) (*pgxpool.Pool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

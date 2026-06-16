@@ -11,15 +11,13 @@ func Auth(jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.Set("user_id", "00000000-0000-0000-0000-000000000000")
-			c.Next()
+			c.AbortWithStatusJSON(401, gin.H{"error": "missing authorization header"})
 			return
 		}
 
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.Set("user_id", "00000000-0000-0000-0000-000000000000")
-			c.Next()
+			c.AbortWithStatusJSON(401, gin.H{"error": "invalid authorization format"})
 			return
 		}
 
@@ -31,19 +29,26 @@ func Auth(jwtSecret string) gin.HandlerFunc {
 		})
 
 		if err != nil || !token.Valid {
-			c.Set("user_id", "00000000-0000-0000-0000-000000000000")
-			c.Next()
+			c.AbortWithStatusJSON(401, gin.H{"error": "invalid or expired token"})
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
-			c.Set("user_id", "00000000-0000-0000-0000-000000000000")
-			c.Next()
+			c.AbortWithStatusJSON(401, gin.H{"error": "invalid token claims"})
 			return
 		}
 
 		c.Set("user_id", claims["sub"])
+		if username, ok := claims["username"].(string); ok {
+			c.Set("user_username", username)
+		}
+		if email, ok := claims["email"].(string); ok {
+			c.Set("user_email", email)
+		}
+		if role, ok := claims["role"].(string); ok {
+			c.Set("user_role", role)
+		}
 		c.Next()
 	}
 }
