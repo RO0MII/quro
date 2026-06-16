@@ -1,0 +1,68 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME:-quro}
+      POSTGRES_USER: ${DB_USER:-quro}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-quro_secret}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    restart: unless-stopped
+
+  panel-api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "8081:8080"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-quro}
+      DB_PASSWORD: ${DB_PASSWORD:-quro_secret}
+      DB_NAME: ${DB_NAME:-quro}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
+      PANEL_URL: ${PANEL_URL:-http://localhost:8080}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@quro.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+    volumes:
+      - /opt/quro/public:/opt/quro/public:ro
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  panel-ui:
+    build:
+      context: ./panel
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "8080:3000"
+    environment:
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8081}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:8081}
+    depends_on:
+      - panel-api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
